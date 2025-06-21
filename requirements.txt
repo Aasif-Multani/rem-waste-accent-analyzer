@@ -1,0 +1,8 @@
+streamlit
+openai
+speechbrain
+torch
+torchaudio
+yt-dlp
+ffmpeg-python
+soundfile
