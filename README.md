@@ -2,7 +2,7 @@
 
 This project is a submission for the REM Waste practical interview challenge. It is a web application that takes a public video URL, analyzes the speaker's English accent, and provides a classification, a confidence score, and a summary.
 
-**Live Demo:** [https://rem-waste-accent-analyzer.streamlit.app/](https://rem-waste-accent-analyzer.streamlit.app/)
+**Live Demo:** [https://aasif-multani-rem-waste-accent-analyzer-app-yf8elf.streamlit.app/](https://rem-waste-accent-analyzer.streamlit.app/)
 
 ## Features
 
