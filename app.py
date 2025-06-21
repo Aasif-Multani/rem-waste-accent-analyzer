@@ -24,8 +24,6 @@ def load_models():
     Loads the SpeechBrain model and initializes the OpenAI client.
     """
     try:
-        # THE CORRECT, REAL MODEL REPOSITORY ID IS USED HERE.
-        # This model identifies language variants, which function as accents (e.g., en-US, en-GB).
         classifier = EncoderClassifier.from_hparams(
             source="speechbrain/lang-id-voxlingua107-ecapa",
             savedir="pretrained_models/lang_id"
@@ -52,13 +50,15 @@ def download_and_extract_audio(url):
     """
     Downloads video and extracts audio as an MP3 file.
     """
+    # NOTE: You can remove the hardcoded 'ffmpeg_location' for deployed apps
+    # as it's handled by packages.txt. It's great for local testing.
     output_audio_path = 'audio.mp3'
     if os.path.exists(output_audio_path):
         os.remove(output_audio_path)
 
     ydl_opts = {
         'format': 'bestaudio/best',
-        'ffmpeg_location': 'D:/github_projects/rem-waste-accent-analyzer/ffmpeg/bin',
+        'ffmpeg_location': 'ffmpeg/bin',
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
         'outtmpl': 'audio',
         'noplaylist': True,
@@ -76,17 +76,25 @@ def download_and_extract_audio(url):
 
 def analyze_accent_with_ai(audio_path, accent_classifier, openai_client):
     """
-    The main analysis pipeline.
+    The main analysis pipeline with a new two-stage process.
     """
     try:
-        # 1. Transcription with OpenAI Whisper
+        # --- Stage 1: Language Detection & Transcription with Whisper ---
+        logger.info("Stage 1: Detecting language and transcribing...")
         with open(audio_path, "rb") as audio_file:
-            transcript = openai_client.audio.transcriptions.create(
-                model="whisper-1", file=audio_file
-            ).text
-        logger.info("Transcription successful.")
+            # Use verbose_json to get the detected language from Whisper
+            transcript_obj = openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="verbose_json"
+            )
+        
+        transcript = transcript_obj.text
+        detected_language_code = transcript_obj.language
+        logger.info(f"Whisper detected language: {detected_language_code}")
 
-        # 2. Accent Classification with SpeechBrain
+        # --- Stage 2: Conditional Accent Analysis ---
+        logger.info("Language is English. Proceeding to accent analysis.")
         signal = accent_classifier.load_audio(audio_path)
         prediction = accent_classifier.classify_batch(signal)
         
@@ -94,9 +102,10 @@ def analyze_accent_with_ai(audio_path, accent_classifier, openai_client):
         model_confidence = f"{prediction[1].exp().item() * 100:.1f}%"
         logger.info(f"SpeechBrain prediction: {accent_label} with {model_confidence} confidence.")
 
-        # 3. Synthesis and Scoring with GPT-4o
+        # Call GPT-4o to synthesize a final, user-friendly result
         prompt = f"""
-        You are an expert hiring assistant. Analyze a candidate's spoken English based on AI-generated data.
+        You are an expert hiring assistant. You have received data for a candidate who is confirmed to be speaking English.
+        Your task is to analyze their accent and fluency based on the following AI-generated data.
 
         **Input Data:**
         - **Transcript:** "{transcript}"
@@ -104,9 +113,9 @@ def analyze_accent_with_ai(audio_path, accent_classifier, openai_client):
 
         **Your Task:**
         Provide a final analysis in a valid JSON object format ONLY. The JSON must contain three keys:
-        1. "accent_classification": Interpret the technical label (e.g., 'en-US: English (United States)') into a user-friendly classification (e.g., "American (US)", "British (UK)"). If not an English variant, state what it is.
-        2. "english_confidence_score": An integer (0-100) representing confidence in the speaker's clarity and fluency for a professional setting. If the accent is not English, this score should be very low.
-        3. "explanation": A one-sentence summary explaining your reasoning.
+        1. "accent_classification": Interpret the technical label (e.g., 'en-US: English (United States)') into a user-friendly classification (e.g., "American (US)", "British (UK)").
+        2. "english_confidence_score": An integer (0-100) representing confidence in the speaker's clarity, fluency, and overall command of English for a professional setting.
+        3. "explanation": A one-sentence summary explaining your reasoning for the score and classification.
         """
         response = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -141,7 +150,7 @@ if accent_classifier and openai_client:
                 audio_file = download_and_extract_audio(video_url)
 
             if audio_file:
-                with st.spinner("Step 2/3: Analyzing speech with AI models... This may take a moment to download the model for the first time."):
+                with st.spinner("Step 2/3: Detecting language and analyzing speech..."):
                     results = analyze_accent_with_ai(audio_file, accent_classifier, openai_client)
                     os.remove(audio_file)
 
