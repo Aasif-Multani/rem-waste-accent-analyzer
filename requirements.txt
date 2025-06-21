@@ -6,3 +6,5 @@ torchaudio
 yt-dlp
 ffmpeg-python
 soundfile
+pytest
+pytest-mock
